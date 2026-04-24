@@ -1,6 +1,6 @@
 {
   "name": "VibeTube",
   "description": "A premium, distraction-free YouTube hub with AI-powered summaries and smart searching.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": []
 }

@@ -39,7 +39,8 @@ import {
   Hash,
   Layout,
   Plus,
-  Share2
+  Share2,
+  Gamepad2
 } from 'lucide-react';
 import { Video } from './types';
 import { 
@@ -50,6 +51,7 @@ import {
   getRecommendations,
   getCreatorSuggestions
 } from './services/geminiService';
+import { getRegionData } from './lib/region';
 
 const KING_ACTIVATION_CODE = "KING-2026";
 
@@ -68,6 +70,8 @@ export default function App() {
   const [emailInput, setEmailInput] = useState('');
   const [activationError, setActivationError] = useState(false);
   
+  const [regionData, setRegionData] = useState<{country: string, countryCode: string, city: string} | null>(null);
+  
   const [currentView, setCurrentView] = useState<KingView>('home');
   const [videos, setVideos] = useState<Video[]>(KING_ELITE_COLLECTION);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
@@ -76,6 +80,7 @@ export default function App() {
   const [isMobileSearchVisible, setIsMobileSearchVisible] = useState(false);
   
   const [isAudioOnly, setIsAudioOnly] = useState(false);
+  const [isSilent, setIsSilent] = useState(false);
   const [isMiniPlayer, setIsMiniPlayer] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [videoQuality, setVideoQuality] = useState('Auto');
@@ -122,7 +127,13 @@ export default function App() {
       }
     }
 
-    loadVideos(true);
+    const initRegion = async () => {
+      const data = await getRegionData();
+      setRegionData(data);
+      loadVideos(true, data.country);
+    };
+
+    initRegion();
 
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -185,9 +196,9 @@ export default function App() {
     }
   };
 
-  const loadVideos = async (initial = false) => {
+  const loadVideos = async (initial = false, region?: string) => {
     setIsSearching(true);
-    const data = await getTrendingVideos();
+    const data = await getTrendingVideos(region || regionData?.country);
     if (data.length > 0) setVideos(prev => initial ? data : [...prev, ...data]);
     setIsSearching(false);
   };
@@ -204,9 +215,9 @@ export default function App() {
     }
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const query = searchQuery.trim();
+  const handleSearch = async (e: React.FormEvent | null, overrideQuery?: string) => {
+    if (e) e.preventDefault();
+    const query = (overrideQuery || searchQuery).trim();
     if (!query) return;
     
     setIsSearching(true);
@@ -217,7 +228,7 @@ export default function App() {
     setIsMobileSearchVisible(false);
     
     try {
-      const results = await aiSearchVideos(query);
+      const results = await aiSearchVideos(query, regionData?.country);
       setVideos(results.length > 0 ? results : KING_ELITE_COLLECTION);
     } catch (error) {
       setVideos(KING_ELITE_COLLECTION);
@@ -241,6 +252,65 @@ export default function App() {
 
     const insight = await getAdvancedInsights(video.title, video.channel);
     setAiInsight(insight);
+
+    const recs = await getRecommendations(video.id, video.title, regionData?.country);
+    if (recs.length > 0) setVideos(prev => {
+      const otherVideos = prev.filter(v => v.id !== video.id);
+      return [video, ...recs, ...otherVideos].slice(0, 50);
+    });
+  };
+
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const startVoiceSearch = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    if (isRecording && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setSearchQuery(transcript);
+      setIsRecording(false);
+      // Automatically trigger search
+      setTimeout(() => {
+        handleSearch(null);
+      }, 500);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event.error);
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error("Recognition already started", e);
+    }
   };
 
   const nextShort = () => {
@@ -251,7 +321,7 @@ export default function App() {
     if (!creatorTopic.trim()) return;
     setIsGenerating(true);
     try {
-      const results = await getCreatorSuggestions(creatorTopic);
+      const results = await getCreatorSuggestions(creatorTopic, regionData?.country);
       setCreatorData(results);
     } catch (error) {
       setCreatorData("Deep SEO extraction encounterd an error. Please try again.");
@@ -305,7 +375,7 @@ export default function App() {
                <button onClick={() => setIsMobileSearchVisible(false)} className="p-2 hover:bg-white/10 rounded-full">
                   <X size={24} />
                </button>
-               <form onSubmit={handleSearch} className="flex-1 flex group h-10">
+               <form onSubmit={(e) => handleSearch(e)} className="flex-1 flex group h-10">
                   <input 
                     type="text" 
                     placeholder="Search YouTube"
@@ -333,7 +403,7 @@ export default function App() {
 
         {/* Center: Search Bar (Desktop Wide) */}
         <div className="hidden sm:flex flex-1 max-w-[720px] items-center justify-center gap-4 px-4">
-          <form onSubmit={handleSearch} className="flex-1 flex max-w-[600px] h-10 group">
+          <form onSubmit={(e) => handleSearch(e)} className="flex-1 flex max-w-[600px] h-10 group">
              <div className="flex-1 flex items-center bg-[#121212] border border-[#303030] rounded-l-full px-4 group-focus-within:border-blue-500 transition-all ml-1 shadow-inner">
                 <Search size={16} className="text-[#888] group-focus-within:block hidden mr-3" />
                 <input 
@@ -352,9 +422,14 @@ export default function App() {
                 <Search size={20} className="text-[#888] group-hover:text-white transition-colors" />
              </button>
           </form>
-          <button type="button" className="w-10 h-10 bg-[#181818] rounded-full flex items-center justify-center hover:bg-[#2a2a2a] transition-colors cursor-pointer" title="Search with your voice">
-             <Mic size={20} />
-          </button>
+           <button 
+                type="button" 
+                onClick={startVoiceSearch}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-90 ${isRecording ? 'bg-red-600 animate-pulse' : 'bg-[#181818] hover:bg-[#333]'}`} 
+                title="Search with your voice"
+              >
+                 <Mic size={19} className={isRecording ? 'text-white' : 'text-yt-gray'} />
+              </button>
         </div>
 
         {/* Right: Tools & Mobile Search Trigger */}
@@ -380,7 +455,11 @@ export default function App() {
            <SidebarItem icon={<Zap size={22} />} label="Shorts" active={currentView === 'shorts'} onClick={() => setCurrentView('shorts')} />
            <SidebarItem icon={<PlaySquare size={22} />} label="Subscriptions" active={currentView === 'subscriptions'} onClick={() => setCurrentView('subscriptions')} />
            <hr className="my-3 border-[#303030]" />
-           <SidebarItem icon={<VideoIcon size={22} />} label="Creator Studio" active={currentView === 'creator'} onClick={() => setCurrentView('creator')} />
+           <SidebarItem icon={<Music size={22} className="text-pink-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.3)]" />} label="Music" onClick={() => { setActiveFilter('Music'); handleSearch(null, 'Music'); }} />
+           <SidebarItem icon={<VideoIcon size={22} className="text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.3)]" />} label="Live" onClick={() => { setActiveFilter('Live'); handleSearch(null, 'Live'); }} />
+           <SidebarItem icon={<Gamepad2 size={22} className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.3)]" />} label="Gaming" onClick={() => { setActiveFilter('Gaming'); handleSearch(null, 'Gaming'); }} />
+           <SidebarItem icon={<History size={22} className="text-blue-500" />} label="News" onClick={() => { setActiveFilter('News'); handleSearch(null, 'News'); }} />
+           <hr className="my-3 border-[#303030]" />
            <SidebarItem icon={<History size={22} />} label="History" active={currentView === 'history'} onClick={() => setCurrentView('history')} />
            <SidebarItem icon={<Music size={22} />} label="Music Mode" active={isAudioOnly} onClick={() => setIsAudioOnly(!isAudioOnly)} />
            <SidebarItem icon={<Settings size={22} />} label="Settings" active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
@@ -411,10 +490,19 @@ export default function App() {
                  <div className="sticky top-0 bg-[#0f0f0f] z-[50] -mx-4 px-4 py-2 space-y-2">
                     <div className="flex items-center justify-between gap-4">
                        <div className="flex gap-3 overflow-x-auto no-scrollbar flex-1">
-                          {['All', 'Verma Tech', 'Gadgets', 'Trending', 'Live', 'Music', 'Gaming', 'News', 'Smartphones', 'Unboxing', 'SEO Pro'].map((cat) => (
+                          {['All', 'Music', 'Live', 'Gaming', 'News', 'Tech', 'Gadgets', 'Trending', 'Smartphones', 'Unboxing'].map((cat) => (
                             <button 
                               key={cat} 
-                              onClick={() => setActiveFilter(cat)}
+                              onClick={() => {
+                                if (cat === 'All') {
+                                  setActiveFilter('All');
+                                  setSearchQuery('');
+                                  loadVideos(true);
+                                } else {
+                                  setActiveFilter(cat);
+                                  handleSearch(null, cat);
+                                }
+                              }}
                               className={`px-3 py-1.5 rounded-lg text-sm font-bold whitespace-nowrap transition-all ${activeFilter === cat ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}
                             >
                               {cat}
@@ -534,16 +622,16 @@ export default function App() {
                  <div className="bg-[#121212] border border-[#303030] rounded-[2.5rem] p-6 sm:p-12 space-y-10 shadow-2xl">
                     <div className="space-y-6">
                        <label className="text-xs font-bold uppercase tracking-[0.2em] text-[#555] ml-2 flex items-center gap-2"><Type size={14} /> Topic / Content Analysis</label>
-                       <div className="flex flex-col sm:flex-row gap-4">
-                          <input 
-                            type="text" 
-                            className="creator-input flex-1" 
-                            placeholder="e.g. Best Gadgets under 500Rs..." 
-                            value={creatorTopic}
-                            onChange={(e) => setCreatorTopic(e.target.value)}
-                          />
-                          <button onClick={generateCreatorTools} disabled={isGenerating} className="bg-red-600 px-8 py-4 sm:py-0 rounded-2xl font-black uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 transition-all shadow-xl shadow-red-600/20 text-sm">Generate SEO</button>
-                       </div>
+           <div className="flex flex-col sm:flex-row gap-4">
+              <input 
+                type="text" 
+                className="creator-input flex-1" 
+                placeholder="e.g. Best Gadgets under 500Rs..." 
+                value={creatorTopic}
+                onChange={(e) => setCreatorTopic(e.target.value)}
+              />
+              <button onClick={generateCreatorTools} disabled={isGenerating} className="bg-red-600 px-8 py-4 sm:py-0 rounded-2xl font-black uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 transition-all shadow-xl shadow-red-600/20 text-sm">Extract Data</button>
+           </div>
                     </div>
 
                     {creatorData && (
@@ -578,7 +666,7 @@ export default function App() {
                        ) : (
                          <iframe 
                             key={`${selectedVideo.id}-${videoQuality}`}
-                            src={`https://www.youtube.com/embed/${selectedVideo.id}?autoplay=1&rel=0&modestbranding=1&origin=${window.location.origin}${getQualityParam()}`}
+                            src={`https://www.youtube.com/embed/${selectedVideo.id}?autoplay=1&rel=0&modestbranding=1&origin=${window.location.origin}${getQualityParam()}${isSilent ? '&mute=1' : ''}`}
                             className="w-full h-full"
                             allowFullScreen
                             referrerPolicy="no-referrer-when-downgrade"
@@ -654,7 +742,7 @@ export default function App() {
                       <div className="relative w-full h-full">
                          <iframe 
                             key={`short-${videos[currentShortIndex].id}`}
-                            src={`https://www.youtube.com/embed/${videos[currentShortIndex].id}?autoplay=1&controls=0&modestbranding=1&rel=0&origin=${window.location.origin}`}
+                            src={`https://www.youtube.com/embed/${videos[currentShortIndex].id}?autoplay=1&controls=0&modestbranding=1&rel=0&origin=${window.location.origin}${isSilent ? '&mute=1' : ''}`}
                             className="w-full h-full"
                             allow="autoplay; encrypted-media; fullscreen"
                             referrerPolicy="no-referrer-when-downgrade"
@@ -675,11 +763,11 @@ export default function App() {
                          </div>
 
                          {/* Action Bar */}
-                         <div className="absolute right-4 bottom-20 flex flex-col gap-6">
-                            <ShortsIcon icon={<ThumbsUp size={28} />} label="Like" />
-                            <ShortsIcon icon={<MessageSquare size={28} />} label="Comments" />
-                            <ShortsIcon icon={<Share2 size={28} />} label="Share" onClick={handleShareApp} />
-                            <ShortsIcon icon={<SkipForward size={28} className="text-red-600" />} label="Next" onClick={nextShort} />
+                         <div className="absolute right-4 bottom-24 flex flex-col gap-6">
+                            <ShortsIcon icon={<ThumbsUp size={24} className="group-hover:text-red-500" />} label="Like" />
+                            <ShortsIcon icon={<MessageSquare size={24} className="group-hover:text-blue-500" />} label="Comments" />
+                            <ShortsIcon icon={<Share2 size={24} className="group-hover:text-amber-500" />} label="Share" onClick={handleShareApp} />
+                            <ShortsIcon icon={<SkipForward size={24} className="text-red-600 group-hover:scale-110" />} label="Next" onClick={nextShort} />
                          </div>
                       </div>
                     ) : (
@@ -709,53 +797,55 @@ export default function App() {
                           <h3 className="text-2xl font-bold">Verma User Elite</h3>
                           <p className="text-yt-gray text-sm">{emailInput || 'ravinehla00@gmail.com'} • Ghost ID #8291</p>
                           <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-4">
-                             <div className="bg-red-600/10 text-red-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-red-600/20">Cinema Pro</div>
-                             <div className="bg-blue-600/10 text-blue-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-600/20">Ad-Free Native</div>
-                             <div className="bg-amber-600/10 text-amber-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-amber-600/20">Verma Tech Dev</div>
+                             <div className="bg-red-600/10 text-red-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-red-600/20">{regionData?.country || 'Region: Auto'}</div>
+                             <div className="bg-blue-600/10 text-blue-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-600/20">Cinema Pro</div>
+                             <div className="bg-amber-600/10 text-amber-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-amber-600/20">Ad-Free Native</div>
                           </div>
                        </div>
                     </div>
 
-                 <div className="p-8 sm:p-12 grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-6">
-                       <h4 className="text-xs font-black uppercase tracking-widest text-[#555] flex items-center gap-2"><Maximize size={14} /> Display & Playback</h4>
-                       <div className="space-y-4">
-                          <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
-                             <span className="text-sm font-bold">Auto-Play Next Video</span>
-                             <div className="w-10 h-6 bg-red-600 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
-                          </div>
-                          <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
-                             <span className="text-sm font-bold">Ambient Lighting Engine</span>
-                             <div className="w-10 h-6 bg-red-600 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
-                          </div>
-                          <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
-                             <span className="text-sm font-bold">Ghost Mode (Anoymous)</span>
-                             <div className="w-10 h-6 bg-white/10 rounded-full relative"><div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
-                          </div>
-                       </div>
-                    </div>
+                     <div className="p-8 sm:p-12 grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-6 text-left">
+                           <h4 className="text-xs font-black uppercase tracking-widest text-[#555] flex items-center gap-2"><Maximize size={14} /> Display & Playback</h4>
+                           <div className="space-y-4">
+                              <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
+                                 <span className="text-sm font-bold">Auto-Play Next Video</span>
+                                 <div className="w-10 h-6 bg-red-600 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
+                              </div>
+                              <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer" onClick={() => setIsSilent(!isSilent)}>
+                                 <span className="text-sm font-bold">Silent Mode (Mute)</span>
+                                 <div className={`w-10 h-6 rounded-full relative transition-colors ${isSilent ? 'bg-red-600' : 'bg-white/10'}`}>
+                                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${isSilent ? 'right-1' : 'left-1'}`} />
+                                 </div>
+                              </div>
+                              <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
+                                 <span className="text-sm font-bold">Ambient Lighting</span>
+                                 <div className="w-10 h-6 bg-red-600 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
+                              </div>
+                           </div>
+                        </div>
 
-                    <div className="space-y-6">
-                       <h4 className="text-xs font-black uppercase tracking-widest text-[#555] flex items-center gap-2"><Download size={14} /> App & Deployment</h4>
-                       <div className="space-y-4">
-                          <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-3">
-                             <p className="text-[10px] font-black uppercase tracking-widest text-red-600">Installation Helper</p>
-                             <p className="text-[11px] text-yt-gray">Tap "Add to Home Screen" to install this cinema station just like a native app. Ad-free engine will persist across all launches.</p>
-                             <button onClick={handleInstallApp} className="w-full py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:scale-[1.02] active:scale-95 transition-all">Install Now</button>
-                          </div>
-                          <button onClick={handleShareApp} className="w-full text-left p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all flex items-center justify-between">
-                             <span className="text-sm font-bold">Export Station Link</span>
-                             <Share2 size={18} />
-                          </button>
-                          <button onClick={() => { setWatchHistory([]); localStorage.removeItem('yt_watch_history'); }} className="w-full text-left p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all flex items-center justify-between group">
-                             <span className="text-sm font-bold group-hover:text-red-500 transition-colors">Clear Watch Engine History</span>
-                             <History size={18} />
-                          </button>
-                       </div>
-                    </div>
-                 </div>
-                 </div>
-              </motion.div>
+                        <div className="space-y-6 text-left">
+                           <h4 className="text-xs font-black uppercase tracking-widest text-[#555] flex items-center gap-2"><Download size={14} /> App & Deployment</h4>
+                           <div className="space-y-4">
+                              <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-3">
+                                 <p className="text-[10px] font-black uppercase tracking-widest text-red-600">Installation Helper</p>
+                                 <p className="text-[11px] text-yt-gray">Tap "Add to Home Screen" to install this station as a native app. Ad-free engine will persist.</p>
+                                 <button onClick={handleInstallApp} className="w-full py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:scale-[1.02] active:scale-95 transition-all">Install Now</button>
+                              </div>
+                              <button onClick={handleShareApp} className="w-full text-left p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all flex items-center justify-between">
+                                 <span className="text-sm font-bold">Export Station Link</span>
+                                 <Share2 size={18} />
+                              </button>
+                              <button onClick={() => { setWatchHistory([]); localStorage.removeItem('yt_watch_history'); }} className="w-full text-left p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all flex items-center justify-between group">
+                                 <span className="text-sm font-bold group-hover:text-red-500 transition-colors pointer-events-none">Clear History Engine</span>
+                                 <History size={18} />
+                              </button>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </motion.div>
             )}
 
             {/* SUBSCRIPTIONS / HISTORY / ETC */}
@@ -803,7 +893,7 @@ export default function App() {
             initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
             className="fixed bottom-20 right-6 w-80 sm:w-96 aspect-video bg-black z-[120] rounded-xl shadow-[0_0_80px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden group"
           >
-             <iframe src={`https://www.youtube-nocookie.com/embed/${selectedVideo.id}?autoplay=1`} className="w-full h-full" />
+             <iframe src={`https://www.youtube-nocookie.com/embed/${selectedVideo.id}?autoplay=1${isSilent ? '&mute=1' : ''}`} className="w-full h-full" />
              <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button onClick={() => setIsMiniPlayer(false)} className="p-1.5 bg-black/80 rounded-full hover:bg-white/10 border border-white/5"><Maximize size={16} /></button>
                 <button onClick={() => setSelectedVideo(null)} className="p-1.5 bg-black/80 rounded-full hover:bg-white/10 border border-white/5"><X size={16} /></button>
