@@ -3,6 +3,9 @@ export interface Video {
   title: string;
   thumbnail: string;
   channel: string;
+  views: string;
+  time: string;
+  duration: string;
   description?: string;
   publishedAt?: string;
 }

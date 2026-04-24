@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, 
@@ -91,6 +91,15 @@ export default function App() {
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [feedbackSent, setFeedbackSent] = useState(false);
+
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [isSearchFilterOpen, setIsSearchFilterOpen] = useState(false);
+  const [searchFilters, setSearchFilters] = useState({
+    uploadDate: 'Any time',
+    duration: 'Any',
+    type: 'Video',
+    sortBy: 'Relevance'
+  });
 
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
@@ -396,17 +405,49 @@ export default function App() {
             
             {/* HOME VIEW */}
             {currentView === 'home' && !selectedVideo && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 sm:p-6 max-w-[1920px] mx-auto">
-                 {/* Category Pills */}
-                 <div className="flex gap-3 overflow-x-auto no-scrollbar pb-6 sticky top-0 bg-[#0f0f0f] z-[50] -mx-4 px-4 py-2 mb-2">
-                    {['All', 'Verma Tech', 'Gadgets', 'Trending', 'Live', 'Music', 'Gaming', 'News', 'Smartphones', 'Unboxing', 'SEO Pro'].map((cat, i) => (
-                      <button 
-                        key={cat} 
-                        className={`px-3 py-1.5 rounded-lg text-sm font-bold whitespace-nowrap transition-all ${i === 0 ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 sm:p-6 max-w-[1920px] mx-auto space-y-6">
+                 
+                 {/* Category Pills & Search Filters */}
+                 <div className="sticky top-0 bg-[#0f0f0f] z-[50] -mx-4 px-4 py-2 space-y-2">
+                    <div className="flex items-center justify-between gap-4">
+                       <div className="flex gap-3 overflow-x-auto no-scrollbar flex-1">
+                          {['All', 'Verma Tech', 'Gadgets', 'Trending', 'Live', 'Music', 'Gaming', 'News', 'Smartphones', 'Unboxing', 'SEO Pro'].map((cat) => (
+                            <button 
+                              key={cat} 
+                              onClick={() => setActiveFilter(cat)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-bold whitespace-nowrap transition-all ${activeFilter === cat ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                            >
+                              {cat}
+                            </button>
+                          ))}
+                       </div>
+                       {searchQuery && (
+                         <button 
+                           onClick={() => setIsSearchFilterOpen(!isSearchFilterOpen)}
+                           className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all shrink-0 ${isSearchFilterOpen ? 'bg-red-600 text-white' : 'bg-white/5 text-yt-gray hover:bg-white/10'}`}
+                         >
+                            <Settings size={14} /> Filters
+                         </button>
+                       )}
+                    </div>
+
+                    <AnimatePresence>
+                       {isSearchFilterOpen && searchQuery && (
+                         <motion.div 
+                           initial={{ height: 0, opacity: 0 }} 
+                           animate={{ height: 'auto', opacity: 1 }} 
+                           exit={{ height: 0, opacity: 0 }}
+                           className="overflow-hidden border-t border-white/5 pt-4 pb-2"
+                         >
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 px-4">
+                               <FilterGroup label="Upload Date" options={['Last hour', 'Today', 'This week', 'This month']} value={searchFilters.uploadDate} onChange={(v) => setSearchFilters({...searchFilters, uploadDate: v})} />
+                               <FilterGroup label="Duration" options={['Under 4 minutes', '4-20 minutes', 'Over 20 minutes']} value={searchFilters.duration} onChange={(v) => setSearchFilters({...searchFilters, duration: v})} />
+                               <FilterGroup label="Type" options={['Video', 'Channel', 'Playlist', 'Movie']} value={searchFilters.type} onChange={(v) => setSearchFilters({...searchFilters, type: v})} />
+                               <FilterGroup label="Sort By" options={['Relevance', 'Upload date', 'View count', 'Rating']} value={searchFilters.sortBy} onChange={(v) => setSearchFilters({...searchFilters, sortBy: v})} />
+                            </div>
+                         </motion.div>
+                       )}
+                    </AnimatePresence>
                  </div>
 
                  {/* Verma Visit Announcement */}
@@ -432,25 +473,49 @@ export default function App() {
                     </div>
                  </div>
 
-                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-4 gap-y-10">
+                 <div className={searchQuery ? "flex flex-col gap-4 max-w-5xl mx-auto" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-4 gap-y-10"}>
                     {isSearching ? (
                        Array(15).fill(0).map((_, i) => <div key={i} className="aspect-video bg-white/5 rounded-xl animate-pulse" />)
                     ) : (
                        videos.map((v, i) => (
-                         <div key={`${v.id}-${i}`} className="yt-card group" onClick={() => selectVideo(v)}>
-                            <div className="yt-thumbnail shadow-2xl relative overflow-hidden rounded-xl border border-white/5 bg-white/5 aspect-video">
-                               <img src={v.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" referrerPolicy="no-referrer" />
-                               <div className="absolute bottom-1 right-1 bg-black/90 px-1.5 py-0.5 rounded text-[11px] font-bold">{v.duration}</div>
-                            </div>
-                            <div className="flex gap-3 mt-3 px-1">
-                               <div className="w-9 h-9 rounded-full bg-[#222] shrink-0 flex items-center justify-center font-bold text-xs border border-white/5">{v.channel[0]}</div>
-                               <div className="min-w-0">
-                                  <h4 className="font-bold text-[15px] leading-tight line-clamp-2 group-hover:text-red-500 transition-colors">{v.title}</h4>
-                                  <p className="text-xs text-yt-gray mt-1 truncate">{v.channel}</p>
-                                  <p className="text-[11px] text-yt-gray/50 mt-0.5">{v.views} • Verma Tech Verified</p>
+                         searchQuery ? (
+                            <div key={`${v.id}-${i}`} className="flex flex-col sm:flex-row gap-4 p-2 group cursor-pointer hover:bg-white/5 rounded-2xl transition-all" onClick={() => selectVideo(v)}>
+                               <div className="w-full sm:w-72 md:w-80 aspect-video relative rounded-xl overflow-hidden bg-white/5 shrink-0 shadow-lg border border-white/5">
+                                  <img src={v.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" referrerPolicy="no-referrer" />
+                                  <div className="absolute bottom-1 right-1 bg-black/90 px-1.5 py-0.5 rounded text-[11px] font-bold">{v.duration}</div>
+                               </div>
+                               <div className="flex-1 space-y-2 py-1">
+                                  <h4 className="font-bold text-lg leading-tight line-clamp-2 group-hover:text-red-500 transition-colors">{v.title}</h4>
+                                  <p className="text-xs text-yt-gray">{v.views} • {v.time} ago</p>
+                                  <div className="flex items-center gap-2 py-2">
+                                     <div className="w-6 h-6 rounded-full bg-[#222] flex items-center justify-center font-bold text-[10px] border border-white/5">{v.channel[0]}</div>
+                                     <span className="text-xs text-yt-gray font-bold hover:text-white transition-colors">{v.channel}</span>
+                                  </div>
+                                  <p className="text-[11px] text-yt-gray/50 line-clamp-2 leading-relaxed font-sans max-w-2xl">
+                                     This premium content is curated by Verma Visit. Experience ad-free native playback and high-quality gadget reviews tailored for your tech journey.
+                                  </p>
+                                  <div className="flex gap-2">
+                                     <div className="bg-red-600/10 text-red-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter">4K Active</div>
+                                     <div className="bg-white/5 text-yt-gray px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter">Verified</div>
+                                  </div>
                                </div>
                             </div>
-                         </div>
+                         ) : (
+                            <div key={`${v.id}-${i}`} className="yt-card group" onClick={() => selectVideo(v)}>
+                               <div className="yt-thumbnail shadow-2xl relative overflow-hidden rounded-xl border border-white/5 bg-white/5 aspect-video">
+                                  <img src={v.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" referrerPolicy="no-referrer" />
+                                  <div className="absolute bottom-1 right-1 bg-black/90 px-1.5 py-0.5 rounded text-[11px] font-bold">{v.duration}</div>
+                               </div>
+                               <div className="flex gap-3 mt-3 px-1">
+                                  <div className="w-9 h-9 rounded-full bg-[#222] shrink-0 flex items-center justify-center font-bold text-xs border border-white/5">{v.channel[0]}</div>
+                                  <div className="min-w-0">
+                                     <h4 className="font-bold text-[15px] leading-tight line-clamp-2 group-hover:text-red-500 transition-colors">{v.title}</h4>
+                                     <p className="text-xs text-yt-gray mt-1 truncate">{v.channel}</p>
+                                     <p className="text-[11px] text-yt-gray/50 mt-0.5">{v.views} • Verma Tech Verified</p>
+                                  </div>
+                               </div>
+                            </div>
+                         )
                        ))
                     )}
                  </div>
@@ -583,57 +648,46 @@ export default function App() {
 
             {/* SHORTS VIEW */}
             {currentView === 'shorts' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex items-center justify-center p-4">
-                 <div className="w-full max-w-sm h-full max-h-[800px] bg-black rounded-[2.5rem] relative overflow-hidden border border-white/10 shadow-2xl flex flex-col">
-                    <div className="flex-1 bg-gradient-to-b from-zinc-900 to-black flex items-center justify-center p-8 text-center relative">
-                       {videos[currentShortIndex] && (
-                         <>
-                            <div className="absolute inset-0 opacity-40">
-                               <img src={videos[currentShortIndex].thumbnail} className="w-full h-full object-cover blur-2xl" />
-                            </div>
-                            <div className="absolute inset-x-4 bottom-24 z-10 text-left space-y-3">
-                               <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center font-bold text-xs shadow-lg">{videos[currentShortIndex].channel[0]}</div>
-                                  <span className="font-bold text-sm">{videos[currentShortIndex].channel} • <span className="text-red-500 font-black">LIVE</span></span>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex items-center justify-center bg-black">
+                 <div className="h-full w-full max-w-[500px] relative overflow-hidden flex flex-col group">
+                    {videos[currentShortIndex] ? (
+                      <div className="relative w-full h-full">
+                         <iframe 
+                            key={`short-${videos[currentShortIndex].id}`}
+                            src={`https://www.youtube.com/embed/${videos[currentShortIndex].id}?autoplay=1&controls=0&modestbranding=1&rel=0&origin=${window.location.origin}`}
+                            className="w-full h-full"
+                            allow="autoplay; encrypted-media; fullscreen"
+                            referrerPolicy="no-referrer-when-downgrade"
+                         />
+                         
+                         {/* Simple Overlay - Hidden until hover/focus on mobile */}
+                         <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-black/80 to-transparent">
+                            <div className="flex items-center gap-3 mb-3">
+                               <div className="w-10 h-10 rounded-full bg-[#333] flex items-center justify-center font-bold text-sm border border-white/10">
+                                  {videos[currentShortIndex].channel[0]}
                                </div>
-                               <p className="text-xs text-white/80 line-clamp-2">{videos[currentShortIndex].title} #VermaVisit #TechShorts</p>
-                               <div className="flex items-center gap-2 text-[10px] bg-white/10 backdrop-blur-md w-fit px-2 py-1 rounded-full border border-white/5">
-                                  <Music size={10} /> Original Sound - Hans Zimmer
-                               </div>
+                               <span className="font-bold text-white text-[15px]">@{videos[currentShortIndex].channel.replace(/\s+/g, '').toLowerCase()}</span>
+                               <button className="bg-white text-black px-4 py-1.5 rounded-full text-xs font-bold transition-transform active:scale-90 ml-2">Subscribe</button>
                             </div>
-                         </>
-                       )}
+                            <p className="text-sm font-medium text-white/90 mb-4 line-clamp-2">
+                               {videos[currentShortIndex].title}
+                            </p>
+                         </div>
 
-                       <div className="absolute right-3 bottom-24 flex flex-col items-center gap-6 z-10">
-                          <div className="flex flex-col items-center gap-1 group cursor-pointer active:scale-90 transition-transform">
-                             <div className="w-12 h-12 bg-white/5 backdrop-blur-md rounded-full flex items-center justify-center group-hover:bg-red-600 transition-colors shadow-xl">
-                                <ThumbsUp size={20} />
-                             </div>
-                             <span className="text-[10px] font-bold">1.2M</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-1 group cursor-pointer active:scale-90 transition-transform">
-                             <div className="w-12 h-12 bg-white/5 backdrop-blur-md rounded-full flex items-center justify-center group-hover:bg-red-600 transition-colors shadow-xl">
-                                <MessageSquare size={20} />
-                             </div>
-                             <span className="text-[10px] font-bold">45K</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-1 group cursor-pointer active:scale-90 transition-transform">
-                             <div className="w-12 h-12 bg-white/5 backdrop-blur-md rounded-full flex items-center justify-center group-hover:bg-red-600 transition-colors shadow-xl">
-                                <Share size={20} />
-                             </div>
-                             <span className="text-[10px] font-bold">Share</span>
-                          </div>
-                       </div>
-
-                       <div className="space-y-4 relative z-10">
-                          <Zap size={64} className="text-red-600 mx-auto animate-pulse" />
-                          <h3 className="text-xl font-black italic tracking-tighter uppercase">Shorts Engine Active</h3>
-                          <p className="text-xs text-yt-gray">Vertical cinematic feed syncing with your preferences...</p>
-                          <button onClick={nextShort} className="px-6 py-2 bg-white text-black rounded-full font-bold text-xs uppercase tracking-tighter mt-4 flex items-center gap-2 mx-auto active:scale-95 transition-all">
-                             <SkipForward size={14} /> Next Short
-                          </button>
-                       </div>
-                    </div>
+                         {/* Action Bar */}
+                         <div className="absolute right-4 bottom-20 flex flex-col gap-6">
+                            <ShortsIcon icon={<ThumbsUp size={28} />} label="Like" />
+                            <ShortsIcon icon={<MessageSquare size={28} />} label="Comments" />
+                            <ShortsIcon icon={<Share2 size={28} />} label="Share" onClick={handleShareApp} />
+                            <ShortsIcon icon={<SkipForward size={28} className="text-red-600" />} label="Next" onClick={nextShort} />
+                         </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                         <Zap size={32} className="text-red-600 animate-pulse" />
+                         <p className="text-xs text-yt-gray">Loading Shorts...</p>
+                      </div>
+                    )}
                  </div>
               </motion.div>
             )}
@@ -662,43 +716,44 @@ export default function App() {
                        </div>
                     </div>
 
-                    <div className="p-8 sm:p-12 grid grid-cols-1 md:grid-cols-2 gap-8">
-                       <div className="space-y-6">
-                          <h4 className="text-xs font-black uppercase tracking-widest text-[#555] flex items-center gap-2"><Maximize size={14} /> Display & Playback</h4>
-                          <div className="space-y-4">
-                             <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
-                                <span className="text-sm font-bold">Auto-Play Next Video</span>
-                                <div className="w-10 h-6 bg-red-600 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
-                             </div>
-                             <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
-                                <span className="text-sm font-bold">Ambient Lighting Engine</span>
-                                <div className="w-10 h-6 bg-red-600 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
-                             </div>
-                             <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
-                                <span className="text-sm font-bold">Ghost Mode (Anoymous)</span>
-                                <div className="w-10 h-6 bg-white/10 rounded-full relative"><div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
-                             </div>
+                 <div className="p-8 sm:p-12 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-6">
+                       <h4 className="text-xs font-black uppercase tracking-widest text-[#555] flex items-center gap-2"><Maximize size={14} /> Display & Playback</h4>
+                       <div className="space-y-4">
+                          <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
+                             <span className="text-sm font-bold">Auto-Play Next Video</span>
+                             <div className="w-10 h-6 bg-red-600 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
                           </div>
-                       </div>
-
-                       <div className="space-y-6">
-                          <h4 className="text-xs font-black uppercase tracking-widest text-[#555] flex items-center gap-2"><Lock size={14} /> Security & System</h4>
-                          <div className="space-y-4">
-                             <button onClick={() => { localStorage.removeItem('yt_cinema_active_v9'); setIsActivated(false); }} className="w-full text-left p-4 bg-red-600/10 text-red-500 rounded-2xl border border-red-600/20 hover:bg-red-600/20 transition-all flex items-center justify-between">
-                                <span className="text-sm font-bold uppercase tracking-tighter">Deactivate Station</span>
-                                <ChevronRight size={18} />
-                             </button>
-                             <button className="w-full text-left p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all flex items-center justify-between">
-                                <span className="text-sm font-bold">Clear Ghost Cache</span>
-                                <ChevronRight size={18} />
-                             </button>
-                             <button onClick={() => setIsFeedbackOpen(true)} className="w-full text-left p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all flex items-center justify-between">
-                                <span className="text-sm font-bold italic">Request Tech Support</span>
-                                <Send size={16} />
-                             </button>
+                          <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
+                             <span className="text-sm font-bold">Ambient Lighting Engine</span>
+                             <div className="w-10 h-6 bg-red-600 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
+                          </div>
+                          <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all cursor-pointer">
+                             <span className="text-sm font-bold">Ghost Mode (Anoymous)</span>
+                             <div className="w-10 h-6 bg-white/10 rounded-full relative"><div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div>
                           </div>
                        </div>
                     </div>
+
+                    <div className="space-y-6">
+                       <h4 className="text-xs font-black uppercase tracking-widest text-[#555] flex items-center gap-2"><Download size={14} /> App & Deployment</h4>
+                       <div className="space-y-4">
+                          <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-3">
+                             <p className="text-[10px] font-black uppercase tracking-widest text-red-600">Installation Helper</p>
+                             <p className="text-[11px] text-yt-gray">Tap "Add to Home Screen" to install this cinema station just like a native app. Ad-free engine will persist across all launches.</p>
+                             <button onClick={handleInstallApp} className="w-full py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:scale-[1.02] active:scale-95 transition-all">Install Now</button>
+                          </div>
+                          <button onClick={handleShareApp} className="w-full text-left p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all flex items-center justify-between">
+                             <span className="text-sm font-bold">Export Station Link</span>
+                             <Share2 size={18} />
+                          </button>
+                          <button onClick={() => { setWatchHistory([]); localStorage.removeItem('yt_watch_history'); }} className="w-full text-left p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 transition-all flex items-center justify-between group">
+                             <span className="text-sm font-bold group-hover:text-red-500 transition-colors">Clear Watch Engine History</span>
+                             <History size={18} />
+                          </button>
+                       </div>
+                    </div>
+                 </div>
                  </div>
               </motion.div>
             )}
@@ -831,9 +886,39 @@ export default function App() {
 
 function SidebarItem({ icon, label, active = false, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick?: () => void }) {
   return (
-    <button onClick={onClick} className={`flex items-center gap-6 px-3 py-2 rounded-xl transition-all ${active ? 'bg-white/10 font-bold' : 'hover:bg-white/5 text-[#f1f1f1]'}`}>
+    <button onClick={onClick} className={`flex items-center gap-6 px-3 py-2 rounded-xl transition-all w-full text-left ${active ? 'bg-white/10 font-bold' : 'hover:bg-white/5 text-[#f1f1f1]'}`}>
       <div className={active ? 'text-red-600 scale-110' : ''}>{icon}</div>
       <span className="text-[14px] leading-none">{label}</span>
     </button>
   );
+}
+
+function FilterGroup({ label, options, value, onChange }: { label: string, options: string[], value: string, onChange: (v: string) => void }) {
+   return (
+      <div className="flex flex-col gap-3">
+         <h5 className="text-[10px] font-black uppercase tracking-widest text-[#555]">{label}</h5>
+         <div className="flex flex-col gap-1">
+            {options.map(opt => (
+               <button 
+                  key={opt}
+                  onClick={() => onChange(opt)}
+                  className={`text-left text-xs py-1 px-2 rounded-md transition-colors ${value === opt ? 'text-white font-bold bg-white/10' : 'text-yt-gray hover:text-white hover:bg-white/5'}`}
+               >
+                  {opt}
+               </button>
+            ))}
+         </div>
+      </div>
+   );
+}
+
+function ShortsIcon({ icon, label, onClick }: { icon: React.ReactNode, label: string, onClick?: () => void }) {
+   return (
+      <button onClick={onClick} className="flex flex-col items-center gap-1 group active:scale-90 transition-transform">
+         <div className="w-12 h-12 bg-white/10 backdrop-blur-xl rounded-full flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 shadow-2xl">
+            {icon}
+         </div>
+         <span className="text-[10px] font-bold drop-shadow-md">{label}</span>
+      </button>
+   );
 }

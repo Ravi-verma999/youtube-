@@ -7,8 +7,9 @@ export async function getTrendingVideos() {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `List 12 of the most popular, currently viral YouTube videos. 
-      CRITICAL: You MUST provide EXACT, REAL, WORKING YouTube Video IDs (11 characters). Do not invent them.
-      Examples of good IDs: 'hHrn076Kg28' (Interstellar), 'kJQP7kiw5Fk' (Despacito), '9bZkp7q19f0' (Gangnam Style).
+      CRITICAL: You MUST provide EXACT, REAL, WORKING YouTube Video IDs (11 characters).
+      IMPORTANT: Only include videos that ALLOW third-party embedding.
+      Examples of good IDs: 'hHrn076Kg28', 'kJQP7kiw5Fk', '9bZkp7q19f0', 'ScMzIvxBSi4', '0e3GPea1Tyg'.
       Return a JSON array: { id: string, title: string, channel: string, thumbnail: string, duration: string, views: string, time: string }.
       Thumbnail format: "https://i.ytimg.com/vi/[VIDEO_ID]/mqdefault.jpg".`,
       config: { responseMimeType: "application/json" }
@@ -23,7 +24,7 @@ export async function getRecommendations(videoId: string, title: string) {
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Based on the video "${title}" (ID: ${videoId}), suggest 6 highly relevant, real YouTube videos. 
+      contents: `Based on the video "${title}" (ID: ${videoId}), suggest 6 highly relevant, real YouTube videos that allow embedding. 
       Return a JSON array: { id: string, title: string, channel: string, thumbnail: string, duration: string, views: string, time: string }.
       Ensure these are REAL trending videos from similar categories.`,
       config: { responseMimeType: "application/json" }
