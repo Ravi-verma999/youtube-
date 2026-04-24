@@ -1,0 +1,21 @@
+{
+  "name": "YouTube Cinema v9.5",
+  "short_name": "Cinema",
+  "description": "Premium Ad-Free YouTube Experience with Creator Tools",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0f0f",
+  "theme_color": "#ff0000",
+  "icons": [
+    {
+      "src": "https://www.gstatic.com/youtube/img/branding/favicon/favicon_144x144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    },
+    {
+      "src": "https://www.gstatic.com/youtube/img/branding/favicon/favicon_192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
